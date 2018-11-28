@@ -2,20 +2,28 @@
 #include<stdlib.h>
 
 #include"./file.h"
+#include"./disk.h"
 //size of blocks in virtual disk
 #define BLOCK_SIZE 512
-//max number of blocks, 5mb total (10240 blocks *512 bytes / 1048578 b/mb)
+//max number of blocks, 5mb total 
 #define MAX_BLOCKS 10240
+//max number of files
+#define INODE_MAX 1280
 //Preset size for superblock is 4kb
 #define SUPERBLOCK_SIZE 4096
 //assumes INODE takes up 60 bytes
 #define INODE_SIZE 60
+//size of the inode table = MAX_INODES * INODE_SIZE
+#define INODE_TABLE_SIZE 76800 
 #define MAX_FILE_COUNT 128 //max 128 files
 
-#define DISK1 "./temp.test"
+#define DISK1 "./disk1.dat"
+
+int create_disk();
 
 int main(){
-    //open the disk
+    create_disk();
+    exit(0);
     inode *n = create_file(1, "abcdefghilkmopqrssssst", "12wwwwww34");
     printf("TOTAL: %lu\nID: %lu\nNAME: %lu\nEXT: %lu\nBLOCK_SIZE: %lu\nBYTE_SIZE: %lu\n", sizeof(n), sizeof(n->id), sizeof(n->name), sizeof(n->extension), sizeof(n->block_count), sizeof(n->byte_size));
 
@@ -26,6 +34,20 @@ int main(){
     }
 }
 
+int create_disk(){
+    superblock *sb = init_super(SUPERBLOCK_SIZE, INODE_MAX, INODE_SIZE, BLOCK_SIZE, DISK1);
+    printf("MAX: %d\n", sb->inode_max);
+    FILE *disk = fopen(DISK1, "r+");
+    fwrite(sb, sizeof(superblock), 1, disk);
+    fclose(disk);
+
+    disk = fopen(DISK1, "r+");
+    superblock *sb2 = malloc(sizeof(superblock));
+    fread(sb2, sizeof(superblock), 1, disk);
+    fclose(disk);
+    
+    printf("ILOC: %lu\nIMAX: %d\n" , sizeof(superblock), sb2->inode_max);
+}
 //Reads an inode from the disk
 //Returns NULL if failed
 inode *fs_open(int offset){
@@ -43,7 +65,7 @@ inode *fs_open(int offset){
     //create inode
     inode *node = malloc(sizeof(inode));
     //get data
-    node = fread(node, sizeof(inode), 1, disk);
+    fread(node, sizeof(inode), 1, disk);
     
     //if failed read: free memory, return null
     if (node == NULL){
@@ -54,11 +76,13 @@ inode *fs_open(int offset){
     return node;
 }
 
-int fs_close(int offset){
+int fs_close(){
     
 
 }
 
 int fs_write(){
 
+
 }
+

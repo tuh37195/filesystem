@@ -23,16 +23,6 @@ typedef struct Inode{
 
 } inode;
 
-typedef struct Directory{
-    char name[MAX_NAME]; // file name
-    int used;                   // whether the file is being used
-    int byte_size;              // file size
-    int block_count;            // number of blocks
-    int start_block;            // first data block
-    int fd_count;               // number of file descriptors using this file
-    int bloacks[];
-} directory;
-
 
 inode *create_file(int id, char *name, char *ext){
     //allocate memory for new inode
@@ -51,17 +41,6 @@ inode *create_file(int id, char *name, char *ext){
     n->block_count = 0;
 
     return n;
-}
-
-directory *create_directory(){
-    
-    //allocate memory for the directory struct
-    directory *d = (directory*)malloc(sizeof(directory));
-    //set all values to 0 or null
-    d->byte_size = 0;
-    d->block_count = 0;
-    d->fd_count = 0;
-    d->used = 0;
 }
 
 #endif
