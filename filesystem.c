@@ -1,88 +1,131 @@
-#include<stdio.h>
+
 #include<stdlib.h>
+#include<stdio.h>
+#define USED 1
+#define NOT_USED 0
+#define BLOCK_SIZE 512
+#define INODE_MAX 30
+#define INODE_SIZE 60
+#define SUPERBLOCK_SIZE 2048
+#define DISK_NAME "./Drive10MB"
+
+void error(char *message, char *location);
 
 #include"./file.h"
 #include"./disk.h"
-//size of blocks in virtual disk
-#define BLOCK_SIZE 512
-//max number of blocks, 5mb total 
-#define MAX_BLOCKS 10240
-//max number of files
-#define INODE_MAX 1280
-//Preset size for superblock is 4kb
-#define SUPERBLOCK_SIZE 4096
-//assumes INODE takes up 60 bytes
-#define INODE_SIZE 60
-//size of the inode table = MAX_INODES * INODE_SIZE
-#define INODE_TABLE_SIZE 76800 
-#define MAX_FILE_COUNT 128 //max 128 files
 
-#define DISK1 "./disk1.dat"
+int find_open_inode();
+int find_open_block();
+void fs_create(char *name, char *ext, char *disk_name, superblock *sb);
 
-int create_disk();
 
 int main(){
-    create_disk();
-    exit(0);
-    inode *n = create_file(1, "abcdefghilkmopqrssssst", "12wwwwww34");
-    printf("TOTAL: %lu\nID: %lu\nNAME: %lu\nEXT: %lu\nBLOCK_SIZE: %lu\nBYTE_SIZE: %lu\n", sizeof(n), sizeof(n->id), sizeof(n->name), sizeof(n->extension), sizeof(n->block_count), sizeof(n->byte_size));
+    
+    //initialize the disk
+    superblock *sb = init_disk(DISK_NAME, sb);
+    printf("%d\n", sb->inode_count);
+    puts("!");
+    //create the root directory
+    fs_create("root", "dir", DISK_NAME, sb);
+    //open the root file
+    FILE *disk = fopen(DISK_NAME, "r+");
+    inode *n = (inode *)malloc(sizeof(inode));
+    fseek(disk, sb->inode_locaton, SEEK_SET);
+    fread(&n, sizeof(n), 1, disk);
+    fclose(disk);
+    printf("ID: %d\nStart Block: %d\nName: %s\nExt: %s\n", n->id, n->start_block, n->name, n->extension);
+    
+}
 
-    inode *n2 = create_file(2, "new file", ".dat");
-    FILE *disk = fopen(DISK1, "w+");
-       if (disk == NULL){
-        
+//a light shell for the user to interact with the file system
+void shell(){
+
+
+}
+
+//finds and returns the number of an open block
+int find_open_block(superblock *sb){
+    //loop through the block map
+    for(int i = 1; i < sb->block_count; i++){
+        //if open block found
+        if (sb->block_map[i] == NOT_USED){
+            //set block to used
+            sb->block_map[i] = USED;
+            //return the block number
+            return i; 
+        }
     }
+    //else no open blocks
+    error("No open block found", "find_open_block");
+    return 0;
 }
 
-int create_disk(){
-    superblock *sb = init_super(SUPERBLOCK_SIZE, INODE_MAX, INODE_SIZE, BLOCK_SIZE, DISK1);
-    printf("MAX: %d\n", sb->inode_max);
-    FILE *disk = fopen(DISK1, "r+");
-    fwrite(sb, sizeof(superblock), 1, disk);
-    fclose(disk);
-
-    disk = fopen(DISK1, "r+");
-    superblock *sb2 = malloc(sizeof(superblock));
-    fread(sb2, sizeof(superblock), 1, disk);
-    fclose(disk);
-    
-    printf("ILOC: %lu\nIMAX: %d\n" , sizeof(superblock), sb2->inode_max);
+//finds and returns the number of the open inode spot
+int find_open_inode(superblock *sb){
+    //loop through the inode map
+    for(int i = 1; i < sb->inode_max; i++){
+        //if open inode found
+        if (sb->inode_map[i] == NOT_USED){
+            //set inode to used
+            sb->inode_map[i] = USED;
+            //return the inode number
+            return i; 
+        }
+    }
+    //else no open inodea
+    error("No open inode found", "find_open_inode");
+    return 0;
 }
-//Reads an inode from the disk
-//Returns NULL if failed
-inode *fs_open(int offset){
+
+void fs_create(char *name, char *ext, char *disk_name, superblock *sb){
+    inode *n = new_inode(name, ext);
+    if (n == NULL){
+        error("Could not create inode", "fs_create");
+        return;
+    }
+
+    if (sb == NULL){
+        error("Could not read superblock", "fs_create");
+        free(n);
+        return;
+    }
     
-    //open the disk file
-    FILE *disk = fopen(DISK1, "r+");
-    
-    //if disk open failed
+    //get file location and starting block address
+    int inode_num = find_open_inode(sb);
+    int block_num = find_open_block(sb);
+    //calculate the block address
+    int inode_address = (inode_num * INODE_SIZE) + sb->inode_locaton;
+    int block_address = (block_num * BLOCK_SIZE) + sb->data_location;
+
+    //if no open inodes or blocks
+    if (inode_num == 0 || block_num == 0){
+        error("Could not create file", "fs_create");
+        free(n);
+        return;
+    }
+    //set the inode info
+    n->id = inode_num;
+    n->start_block = block_num;
+
+    //open the disk
+    FILE *disk = fopen(disk_name, "r+");
+    //if disk couldn't be opened
     if (disk == NULL){
-        return NULL;
+        error("File could not be opened", "fs_create");
+        free(n);
+        exit(1);
     }
     
-    //move to correct spot for file
-    fseek(disk, offset, SEEK_SET);
-    //create inode
-    inode *node = malloc(sizeof(inode));
-    //get data
-    fread(node, sizeof(inode), 1, disk);
+    fseek(disk, sb->inode_locaton, SEEK_SET);
+    //else write the inode to disk
+    fwrite(&n, sizeof(n), 1, disk);
     
-    //if failed read: free memory, return null
-    if (node == NULL){
-        free(node);
-        return NULL;
-    }
-
-    return node;
-}
-
-int fs_close(){
+    //close disk
+    fclose(disk);
     
-
 }
 
-int fs_write(){
-
-
+void error(char *message, char *location){
+    printf("ERROR: %s\nLOCATION: %s\n", message, location);
+    return;
 }
-
